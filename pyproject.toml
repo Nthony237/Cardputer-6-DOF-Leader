@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cardputer-teleop"
+version = "0.1.0"
+description = "Cartesian teleop for i2rt YAM arms: differential IK, viser sim, keyboard now and a Cardputer controller later."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+sim = ["viser>=1.0", "yourdfpy>=0.0.56"]
+keys = ["pynput>=1.7"]
+test = ["pytest>=7.4"]
+dev = ["cardputer-teleop[sim,test]"]
+
+[project.scripts]
+cardputer-teleop = "cardputer_teleop.teleop:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+cardputer_teleop = ["assets/*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
