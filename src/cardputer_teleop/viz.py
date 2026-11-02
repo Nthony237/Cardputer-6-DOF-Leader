@@ -76,3 +76,30 @@ class SimViewer:
 
     def close(self):
         self.server.stop()
+
+
+class CardputerModel:
+    """A Cardputer-shaped block in the viser scene that turns with the real device.
+
+    Orange when packets are flowing, grey when the link is lost. The axes show the IMU frame
+    (x red, y green, z blue). ``scale`` enlarges it so it's easy to see next to the arm.
+    """
+
+    SIZE = (0.084, 0.054, 0.020)  # m, roughly the Cardputer's case
+
+    def __init__(self, server: viser.ViserServer, name: str = "/cardputer", position=(0.0, 0.0, 0.0),
+                 scale: float = 1.0):
+        self.root = server.scene.add_frame(name, position=position, show_axes=False)
+        sx, sy, sz = (s * scale for s in self.SIZE)
+        self._live = server.scene.add_box(f"{name}/body_live", color=(255, 140, 40), dimensions=(sx, sy, sz))
+        self._lost = server.scene.add_box(f"{name}/body_lost", color=(130, 130, 130), dimensions=(sx, sy, sz),
+                                          visible=False)
+        # A dark panel on top, toward +x, so you can tell which way up and forward it is.
+        server.scene.add_box(f"{name}/screen", color=(20, 20, 30), dimensions=(sx * 0.45, sy * 0.8, sz * 0.1),
+                             position=(sx * 0.22, 0.0, sz * 0.5))
+        server.scene.add_frame(f"{name}/axes", axes_length=0.8 * sx, axes_radius=0.04 * sz)
+
+    def update(self, wxyz, alive: bool) -> None:
+        self.root.wxyz = np.asarray(wxyz, dtype=float)
+        self._live.visible = alive
+        self._lost.visible = not alive
