@@ -1,4 +1,9 @@
-"""Cartesian keyboard teleop. ``cardputer-teleop --mode sim`` runs on a laptop with no arms."""
+"""Cartesian keyboard teleop. ``cardputer-teleop --mode sim`` runs on a laptop with no arms.
+
+With ``--cardputer`` the Cardputer's packet stream becomes the heartbeat: the arm only moves
+while packets arrive, its gripper keys drive the gripper, and its orientation is shown next to
+the arm. (Moving the arm *with* the Cardputer comes in Phase 3.)
+"""
 from __future__ import annotations
 
 import argparse
@@ -11,6 +16,7 @@ from cardputer_teleop.controller import CartesianController
 from cardputer_teleop.ik import DifferentialIK
 from cardputer_teleop.keyboard import HELP, HeldKeys, KeyboardInput, gripper_from_keys, twist_from_keys
 from cardputer_teleop.kinematics import SerialChain
+from cardputer_teleop.protocol import DEFAULT_PORT
 from cardputer_teleop.robots import make_robot
 from cardputer_teleop.safety import Heartbeat
 
@@ -27,6 +33,9 @@ def parse_args(argv=None):
     p.add_argument("--hz", type=float, default=50.0, help="Control loop rate")
     p.add_argument("--port", type=int, default=8080, help="viser port")
     p.add_argument("--keys", choices=("terminal", "pynput", "none"), default="terminal")
+    p.add_argument("--cardputer", action="store_true",
+                   help="Listen for the Cardputer: its packets are the heartbeat, its keys drive the gripper")
+    p.add_argument("--udp-port", type=int, default=DEFAULT_PORT, help="UDP port for --cardputer")
     p.add_argument("--duration", type=float, default=0.0, help="Stop after N seconds (0 = run until quit)")
     return p.parse_args(argv)
 
@@ -53,6 +62,14 @@ def main(argv=None):
 
     viewer = SimViewer(cfg.robot.urdf, chain.joint_names, cfg.workspace, cfg.robot.gripper_joint,
                        port=args.port, max_linear_speed=cfg.speed.linear)
+    receiver = None
+    if args.cardputer:
+        from cardputer_teleop.receiver import CardputerReceiver
+        from cardputer_teleop.viz import CardputerModel
+
+        receiver = CardputerReceiver(port=args.udp_port, heartbeat=controller.heartbeat).start()
+        device_model = CardputerModel(viewer.server, "/cardputer", position=(0.0, -0.45, 0.35), scale=2.0)
+        print(f"Listening for the Cardputer on UDP {receiver.port}; the arm holds until packets arrive.")
     keyboard = KeyboardInput(args.keys) if args.keys != "none" else None
     print(HELP)
 
@@ -79,9 +96,14 @@ def main(argv=None):
             if viewer.home_requested:
                 homing, viewer.home_requested = True, False
 
-            # Local keyboard is always connected. The Cardputer receiver will beat() per packet
-            # instead, so a dropped Wi-Fi link makes the controller hold.
-            controller.heartbeat.beat()
+            # The local keyboard is always connected, so it beats the heartbeat itself. With
+            # --cardputer the receiver beats once per packet instead, so a dropped Wi-Fi link
+            # makes the controller hold.
+            device = receiver.latest if receiver else None
+            if receiver is None:
+                controller.heartbeat.beat()
+            else:
+                device_model.update(device.quat if device else (1.0, 0.0, 0.0, 0.0), controller.heartbeat.alive())
             controller.held = viewer.hold.value
 
             q = robot.get_joint_positions()
@@ -109,7 +131,10 @@ def main(argv=None):
                     controller.set_target(drag, q)
                 if np.any(twist):
                     controller.apply_twist(twist, dt, q, rotation_frame=viewer.frame.value)
-                gripper = float(np.clip(gripper + gripper_from_keys(held, now) * GRIPPER_RATE * dt, 0.0, 1.0))
+                grip_dir = gripper_from_keys(held, now)
+                if device is not None and controller.heartbeat.alive():
+                    grip_dir = grip_dir or device.gripper_direction
+                gripper = float(np.clip(gripper + grip_dir * GRIPPER_RATE * dt, 0.0, 1.0))
                 res = controller.update(q, dt)
                 if res is None:
                     robot.hold()
@@ -127,6 +152,10 @@ def main(argv=None):
             q = robot.get_joint_positions()
             T_tcp = chain.fk(q)
             p = T_tcp[:3, 3]
+            if receiver is not None:
+                st = receiver.stats
+                status += (f"  \nCardputer: {st.rate_hz:.0f} Hz, {st.loss_pct:.1f}% lost, "
+                           f"clutch {'on' if device and device.clutch else 'off'}")
             status += f"  \nTCP [{p[0]:.3f}, {p[1]:.3f}, {p[2]:.3f}] m, mode {args.mode}"
             viewer.update(q, robot.get_gripper(), T_tcp, controller.T_target, status)
 
@@ -140,6 +169,8 @@ def main(argv=None):
         pass
     finally:
         robot.hold()
+        if receiver:
+            receiver.close()
         if keyboard:
             keyboard.close()
         robot.close()

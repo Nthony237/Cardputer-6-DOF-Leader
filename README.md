@@ -3,7 +3,7 @@
 A low-cost wireless handheld controller for Cartesian teleoperation of i2rt YAM arms: move your
 hand and the gripper follows, instead of jogging one joint at a time. The controller is an
 M5Stack Cardputer ADV (ESP32-S3, BMI270 IMU) streaming over UDP to a laptop that fuses IMU
-orientation with AprilTag position and drives the arm through differential IK.
+orientation with camera hand-tracking position and drives the arm through differential IK.
 
 ```
 Cardputer (IMU + clutch) --UDP--> receiver --> fuse with AprilTag position
@@ -14,10 +14,10 @@ Cardputer (IMU + clutch) --UDP--> receiver --> fuse with AprilTag position
 
 | Phase | What | State |
 |---|---|---|
-| 1 | Differential IK in sim + Cartesian keyboard teleop | **done (this package)** |
-| 2 | Cardputer IMU streaming, orientation shown in viser | next |
-| 3 | Orientation control of the sim gripper with a clutch | |
-| 4 | AprilTag position tracking + IMU fusion | |
+| 1 | Differential IK in sim + Cartesian keyboard teleop | done |
+| 2 | Cardputer IMU streaming, orientation shown in viser | **done** ([how it works](docs/phase2-imu-streaming.md), [firmware](firmware/cardputer_leader/README.md)) |
+| 3 | Orientation control + IMU-only clutch-and-push translation | next |
+| 4 | MediaPipe hand-tracking position fused with the IMU (AprilTag as fallback) | |
 | 5 | Real arm, supervised, all safety limits on | |
 | 6 | Evaluation (joint jog vs Cartesian keyboard vs controller) and demo collection | |
 
@@ -55,6 +55,17 @@ moves a short fixed step and holding relies on key repeat. For smooth press/rele
 `pip install -e ".[keys]"` and `cardputer-teleop --keys pynput` (macOS will ask for
 Input Monitoring / Accessibility permission for your terminal).
 
+### The Cardputer (Phase 2)
+
+Flash the firmware ([instructions](firmware/cardputer_leader/README.md)), then:
+
+```bash
+cardputer-imu-view            # a block in the browser turns with the device
+cardputer-imu-view --fake     # same, with a fake Cardputer (no hardware)
+cardputer-teleop --cardputer  # arm sim: holds unless Cardputer packets keep arriving
+cardputer-fake --help         # fake device with packet loss / stalls, for testing
+```
+
 ### Using the real YAM URDF
 
 Copy `configs/example.toml`, set `urdf`, `ee_link` (the link at the point between the fingers),
@@ -73,6 +84,12 @@ The IK reads the chain from the URDF root to `ee_link` and ignores side branches
 | `robots/` | Sim/real switch: `SimRobot` (rate-limited kinematic sim) and the `YamRobot` stub for Phase 5 |
 | `viz.py` | viser scene: URDF, TCP and target frames, workspace box, GUI |
 | `teleop.py` | `cardputer-teleop` CLI and control loop |
+| `protocol.py` | The 56-byte Cardputer UDP packet (matches `firmware/.../packet.h`) |
+| `orientation.py` | Quaternion helpers and the Madgwick filter (same math as the firmware) |
+| `receiver.py` | UDP receiver: newest packet, loss counting, heartbeat |
+| `imu_view.py` | `cardputer-imu-view`: live device orientation in viser |
+| `fake_sender.py` | `cardputer-fake`: simulated Cardputer for testing without hardware |
+| `firmware/cardputer_leader/` | PlatformIO firmware for the Cardputer ADV |
 
 ## Safety design
 
@@ -80,6 +97,6 @@ Every command, whatever the input device, goes through the same chain:
 workspace clamp → target leash (the target may only lead the real TCP by 5 cm / 0.5 rad, so an
 unreachable target can't wind up) → TCP speed limit → IK joint speed limit → joint position
 limits with margin → robot-side rate limit. The heartbeat watchdog makes the controller hold
-when input stops (the Cardputer receiver will beat once per packet). `--mode real` deliberately
+when input stops (with `--cardputer`, the receiver beats once per valid packet). `--mode real` deliberately
 raises until Phase 5, which also needs a deadman key, a hardware e-stop within reach, and
 supervised testing only.

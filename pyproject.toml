@@ -18,6 +18,8 @@ dev = ["cardputer-teleop[sim,test]"]
 
 [project.scripts]
 cardputer-teleop = "cardputer_teleop.teleop:main"
+cardputer-imu-view = "cardputer_teleop.imu_view:main"
+cardputer-fake = "cardputer_teleop.fake_sender:main"
 
 [tool.setuptools]
 include-package-data = true

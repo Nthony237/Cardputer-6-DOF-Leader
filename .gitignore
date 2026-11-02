@@ -6,3 +6,7 @@ __pycache__/
 build/
 dist/
 .DS_Store
+
+# Firmware: build output and local Wi-Fi secrets
+.pio/
+firmware/**/include/secrets.h
