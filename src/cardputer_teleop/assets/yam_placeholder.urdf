@@ -1,0 +1,151 @@
+<?xml version="1.0"?>
+<!--
+  PLACEHOLDER 6-DOF arm with roughly YAM-like proportions, built from primitives only.
+  It exists so the IK and sim run before the real YAM URDF is added. Dimensions and
+  limits are NOT the real YAM's. Replace with the real URDF (pass urdf/ee_link to the CLI
+  or edit the default config) before trusting any numbers.
+
+  Chain: base_link -> link1..link6 -> tcp (fixed). Gripper fingers branch off link6.
+-->
+<robot name="yam_placeholder">
+  <material name="body"><color rgba="0.82 0.82 0.85 1"/></material>
+  <material name="joint"><color rgba="0.20 0.22 0.26 1"/></material>
+  <material name="finger"><color rgba="0.95 0.55 0.15 1"/></material>
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0.045"/>
+      <geometry><cylinder radius="0.06" length="0.09"/></geometry>
+      <material name="joint"/>
+    </visual>
+  </link>
+
+  <joint name="joint1" type="revolute">
+    <parent link="base_link"/><child link="link1"/>
+    <origin xyz="0 0 0.09" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-2.6" upper="2.6" velocity="3.0" effort="20"/>
+  </joint>
+  <link name="link1">
+    <visual>
+      <origin xyz="0 0 0.02"/>
+      <geometry><cylinder radius="0.045" length="0.04"/></geometry>
+      <material name="body"/>
+    </visual>
+  </link>
+
+  <joint name="joint2" type="revolute">
+    <parent link="link1"/><child link="link2"/>
+    <origin xyz="0 0 0.04" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.0" upper="2.2" velocity="3.0" effort="20"/>
+  </joint>
+  <link name="link2">
+    <visual>
+      <origin xyz="0 0 0.13"/>
+      <geometry><box size="0.05 0.05 0.26"/></geometry>
+      <material name="body"/>
+    </visual>
+    <visual>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry><cylinder radius="0.035" length="0.07"/></geometry>
+      <material name="joint"/>
+    </visual>
+  </link>
+
+  <joint name="joint3" type="revolute">
+    <parent link="link2"/><child link="link3"/>
+    <origin xyz="0 0 0.26" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-2.4" upper="1.4" velocity="3.0" effort="20"/>
+  </joint>
+  <link name="link3">
+    <visual>
+      <origin xyz="0.12 0 0"/>
+      <geometry><box size="0.24 0.04 0.04"/></geometry>
+      <material name="body"/>
+    </visual>
+    <visual>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry><cylinder radius="0.03" length="0.06"/></geometry>
+      <material name="joint"/>
+    </visual>
+  </link>
+
+  <joint name="joint4" type="revolute">
+    <parent link="link3"/><child link="link4"/>
+    <origin xyz="0.24 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-2.6" upper="2.6" velocity="4.0" effort="10"/>
+  </joint>
+  <link name="link4">
+    <visual>
+      <origin xyz="0.03 0 0"/>
+      <geometry><box size="0.06 0.035 0.035"/></geometry>
+      <material name="body"/>
+    </visual>
+  </link>
+
+  <joint name="joint5" type="revolute">
+    <parent link="link4"/><child link="link5"/>
+    <origin xyz="0.06 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.6" upper="1.6" velocity="4.0" effort="10"/>
+  </joint>
+  <link name="link5">
+    <visual>
+      <origin xyz="0.025 0 0"/>
+      <geometry><box size="0.05 0.03 0.03"/></geometry>
+      <material name="joint"/>
+    </visual>
+  </link>
+
+  <joint name="joint6" type="revolute">
+    <parent link="link5"/><child link="link6"/>
+    <origin xyz="0.05 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-2.6" upper="2.6" velocity="4.0" effort="10"/>
+  </joint>
+  <link name="link6">
+    <visual>
+      <origin xyz="0.02 0 0"/>
+      <geometry><box size="0.04 0.08 0.03"/></geometry>
+      <material name="body"/>
+    </visual>
+  </link>
+
+  <joint name="tcp_joint" type="fixed">
+    <parent link="link6"/><child link="tcp"/>
+    <origin xyz="0.10 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="tcp"/>
+
+  <joint name="gripper" type="prismatic">
+    <parent link="link6"/><child link="finger_left"/>
+    <origin xyz="0.04 0.005 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="0.0" upper="0.035" velocity="0.1" effort="10"/>
+  </joint>
+  <link name="finger_left">
+    <visual>
+      <origin xyz="0.03 0.005 0"/>
+      <geometry><box size="0.06 0.01 0.02"/></geometry>
+      <material name="finger"/>
+    </visual>
+  </link>
+
+  <joint name="gripper_mirror" type="prismatic">
+    <parent link="link6"/><child link="finger_right"/>
+    <origin xyz="0.04 -0.005 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-0.035" upper="0.0" velocity="0.1" effort="10"/>
+    <mimic joint="gripper" multiplier="-1" offset="0"/>
+  </joint>
+  <link name="finger_right">
+    <visual>
+      <origin xyz="0.03 -0.005 0"/>
+      <geometry><box size="0.06 0.01 0.02"/></geometry>
+      <material name="finger"/>
+    </visual>
+  </link>
+</robot>

@@ -1,0 +1,20 @@
+# Copy this file, point it at the real YAM URDF, and run:
+#   cardputer-teleop --config configs/yam.toml
+# Relative paths are resolved from this file's folder.
+
+[robot]
+urdf = "../src/cardputer_teleop/assets/yam_placeholder.urdf"
+ee_link = "tcp"            # link whose origin is the controlled point (between the fingers)
+gripper_joint = "gripper"  # set to "" if the URDF has no gripper joint
+home = [0.0, 0.24, -0.35, 1.68, 0.0, 0.0]  # one value per joint from base to ee_link
+
+[workspace]  # TCP limits in the robot base frame, meters
+lower = [0.10, -0.40, 0.03]
+upper = [0.55, 0.40, 0.55]
+min_radius_xy = 0.10
+max_reach = 0.60
+
+[speed]
+linear = 0.15       # m/s max TCP speed
+angular = 1.0       # rad/s max TCP rotation speed
+joint_scale = 0.5   # fraction of URDF joint velocity limits
