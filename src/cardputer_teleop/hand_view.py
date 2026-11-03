@@ -21,7 +21,7 @@ from collections import deque
 
 import numpy as np
 
-from cardputer_teleop.hand import DEFAULT_AXES, OneEuroFilter, parse_axes
+from cardputer_teleop.hand import DEFAULT_AXES, OneEuroFilter, PinchDetector, parse_axes
 from cardputer_teleop.hand_tracker import DEFAULT_HFOV, HAND_SIDES, FakeHandTracker, WebcamHandTracker
 from cardputer_teleop.transforms import matrix_to_wxyz
 
@@ -68,6 +68,7 @@ def main(argv=None):
     preview = server.gui.add_image(np.zeros((180, 320, 3), dtype=np.uint8), label="Webcam", format="jpeg",
                                    jpeg_quality=70)
     filt = OneEuroFilter()
+    pinch = PinchDetector()
     raw_hist: deque = deque()
     smooth_hist: deque = deque()
     last_t, last_preview = None, None
@@ -103,6 +104,10 @@ def main(argv=None):
                 p = smooth_hist[-1][1]
                 jr = jitter_mm([v for _, v in raw_hist])
                 js = jitter_mm([v for _, v in smooth_hist])
+                if obs.pinch is not None:
+                    pinched = pinch.update(obs, now)
+                    lines.append(f"**Pinch** {obs.pinch:.2f} ({'PINCHED = grab' if pinched else 'open'}; "
+                                 f"grabs below {pinch.on:.2f}, lets go above {pinch.off:.2f})")
                 lines += [(f"**Hand** ({obs.side}, {obs.score:.2f}) at x {p[0]:+.3f}, y {p[1]:+.3f}, "
                            f"z {p[2]:+.3f} m (x = toward screen)"),
                           (f"**Jitter, last 1 s** (hold still): raw {jr[0]:.1f} / {jr[1]:.1f} / {jr[2]:.1f} mm, "

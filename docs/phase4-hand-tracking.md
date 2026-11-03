@@ -135,6 +135,37 @@ and turn your hand. The webcam picture is in the browser panel. Useful options:
 `--hand-gain 0.5` (finer moves), `--hand-side right` (only follow your right hand),
 `--camera 1` (an external camera).
 
+## Pinch to grab: Cardputer on the back of your hand
+
+Holding space while gripping the Cardputer is awkward. With `--pinch`, **touching your thumb
+and index finger together is the clutch**: pinch = follow, open = stop (space / G0 still work
+too). That frees the Cardputer to be strapped on.
+
+**Where to put it: the back of your hand**, with a velcro strap or a fingerless glove, screen
+facing up and the screen end toward your fingers. There it turns with your hand (wrist bends
+included), your fingers stay free to pinch, and you can still see the screen and reach G0, z
+and b with the other hand. On the forearm it would only feel your forearm turning.
+
+How the pinch is measured: the distance between the thumb tip and index tip, divided by the
+length of your palm, from MediaPipe's 3D hand shape. Dividing by the palm makes it the same
+near or far from the camera. Fingers touching read about 0.15, an open hand 0.6 or more. It
+grabs below 0.30 and only lets go above 0.45 (two thresholds, so a pinch near the edge
+doesn't flicker). `cardputer-hand-view` shows your live pinch number, so tell me if those
+thresholds don't suit your hand.
+
+Safety stays the same: you must keep pinching for the arm to move. Open your fingers, or
+let the camera lose your hand for 0.25 s, and the arm stops where it is. The Cardputer still
+has to be streaming (it is the heartbeat).
+
+```bash
+cardputer-teleop --cardputer --hand webcam --pinch      # the real thing
+cardputer-teleop --fake wrist --hand fake --pinch       # no hardware
+```
+
+Press **z** once after strapping it on, with your fingers pointing at the laptop. Keep your
+palm or the side of your hand toward the camera: if the back of your hand faces it, the
+Cardputer hides your fingers. The gripper's open/close is on the laptop (n / m) for now.
+
 ## Is MediaPipe good enough, or do we need AprilTag?
 
 The plan keeps AprilTag (a printed square code stuck on the Cardputer) as the fallback.
@@ -155,7 +186,7 @@ faces the camera.
 
 | File | What's in it |
 |---|---|
-| `src/cardputer_teleop/hand.py` | The math: picture → 3D position, 1 euro filter, clutch-relative follower with loss/glitch handling. No camera, fully tested. |
+| `src/cardputer_teleop/hand.py` | The math: picture → 3D position, 1 euro filter, clutch-relative follower with loss/glitch handling, pinch detector. No camera, fully tested. |
 | `src/cardputer_teleop/hand_tracker.py` | Webcam + MediaPipe in a background thread (like the UDP receiver), plus a fake camera for tests. |
 | `src/cardputer_teleop/hand_view.py` | `cardputer-hand-view`: preview, 3D ball, jitter numbers. |
 | `src/cardputer_teleop/leader.py` | Now also takes the hand position while space is held. |

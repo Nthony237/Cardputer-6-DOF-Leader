@@ -244,3 +244,62 @@ def test_fake_camera_loses_the_hand_and_glitches():
 def test_fake_cardputer_hand_scenario_holds_the_clutch():
     dev = FakeCardputer(scenario="hand")
     assert dev.packet(5.0).clutch and not dev.packet(1.2).clutch
+
+
+# ---------------------------------------------------------------- pinch to grab
+from cardputer_teleop.hand import INDEX_TIP, MIDDLE_MCP, THUMB_TIP, PinchDetector, pinch_ratio
+
+
+def hand_with_gap(gap):
+    P = np.zeros((21, 3))
+    P[MIDDLE_MCP] = [0, -0.09, 0]  # 9 cm palm
+    P[THUMB_TIP], P[INDEX_TIP] = [0.03, -0.1, 0], [0.03 + gap, -0.1, 0]
+    return P
+
+
+def test_pinch_ratio_ignores_how_the_hand_is_turned():
+    P = hand_with_gap(0.018)
+    R = rpy_to_matrix(np.radians([40, -20, 70]))
+    assert pinch_ratio(P) == pytest.approx(0.2)
+    assert pinch_ratio(P @ R.T) == pytest.approx(0.2)
+
+
+def pinch_obs(t, ratio):
+    return HandObservation(t=t, p_cam=np.array([0, 0, 0.5]), pinch=ratio)
+
+
+def test_pinch_has_hysteresis_and_stops_when_the_hand_is_lost():
+    d = PinchDetector()
+    assert not d.update(pinch_obs(0.0, 0.35), 0.0)  # between the thresholds, not pinched yet
+    assert d.update(pinch_obs(0.1, 0.2), 0.1)  # pinch
+    assert d.update(pinch_obs(0.2, 0.4), 0.2)  # opening a little: still holding
+    assert not d.update(pinch_obs(0.3, 0.6), 0.3)  # open: let go
+    assert d.update(pinch_obs(0.4, 0.2), 0.4)
+    assert not d.update(pinch_obs(0.4, 0.2), 0.8)  # no new frame for 0.4 s: hand lost = let go
+
+
+def pinch_leader():
+    return CardputerLeader(LeaderSettings(smoothing_tau=0.0, hand=HandSettings(min_cutoff=1e4), pinch_clutch=True))
+
+
+def test_pinch_grabs_without_any_key():
+    L = pinch_leader()
+    assert L.update(pkt(0, flags=0), T0, DT, 0.1, hand=pinch_obs(0.0, 0.7), now=0.0).mode == "idle"
+    cmd = L.update(pkt(0, flags=0), T0, DT, 0.1, hand=pinch_obs(0.1, 0.15), now=0.1)
+    assert cmd.mode == "orient" and L.pinched
+    np.testing.assert_allclose(cmd.pose, T0, atol=1e-9)  # grabbing never jumps
+    o = HandObservation(t=0.2, p_cam=np.array([0, 0, 0.45]), pinch=0.15)
+    cmd = L.update(pkt(0, flags=0), T0, DT, 0.1, hand=o, now=0.2)
+    np.testing.assert_allclose(cmd.pose[:3, 3], T0[:3, 3] + [0.05, 0, 0], atol=1e-4)
+    assert L.update(pkt(0, flags=0), T0, DT, 0.1, hand=pinch_obs(0.3, 0.8), now=0.3).mode == "idle"
+
+
+def test_pinch_is_off_unless_asked_for():
+    L = hand_leader()
+    assert L.update(pkt(0, flags=0), T0, DT, 0.1, hand=pinch_obs(0.0, 0.1), now=0.0).mode == "idle"
+
+
+def test_pinch_still_needs_the_cardputer_link():
+    L = pinch_leader()
+    assert L.update(None, T0, DT, 0.1, hand=pinch_obs(0.0, 0.1), now=0.0).mode == "idle"
+    assert L.update(pkt(0, flags=0), T0, DT, 0.1, hand=pinch_obs(0.1, 0.1), now=0.1, enabled=False).mode == "idle"

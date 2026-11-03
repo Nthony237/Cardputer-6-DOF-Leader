@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 # MediaPipe's 21 hand landmarks. We only need a few by name.
-WRIST, THUMB_TIP, INDEX_MCP, MIDDLE_MCP, PINKY_MCP = 0, 4, 5, 9, 17
+WRIST, THUMB_TIP, INDEX_MCP, INDEX_TIP, MIDDLE_MCP, PINKY_MCP = 0, 4, 5, 8, 9, 17
 HAND_CONNECTIONS = [
     (0, 1), (1, 2), (2, 3), (3, 4),  # thumb
     (0, 5), (5, 6), (6, 7), (7, 8),  # index
@@ -106,6 +106,40 @@ def hand_position(image_xy: np.ndarray, world_xyz: np.ndarray, width: int, heigh
     return t
 
 
+def pinch_ratio(world_xyz: np.ndarray) -> float:
+    """Thumb-tip-to-index-tip distance divided by the palm's length (wrist to middle knuckle).
+
+    Uses the 3D landmarks in metres, so it doesn't change with distance from the camera or with
+    how the hand is turned. Touching fingers read about 0.1 to 0.2, an open hand 0.6 or more.
+    """
+    P = np.asarray(world_xyz, dtype=float)
+    palm = float(np.linalg.norm(P[MIDDLE_MCP] - P[WRIST]))
+    return float(np.linalg.norm(P[THUMB_TIP] - P[INDEX_TIP])) / max(palm, 1e-6)
+
+
+class PinchDetector:
+    """Pinch = "grab": thumb and index together means follow, apart means stop.
+
+    Two thresholds ("hysteresis") so a pinch that hovers near the edge doesn't flicker on and
+    off: it switches on below ``on`` and only switches off again above ``off``. A hand that
+    isn't in view (no fresh frame for ``lost_timeout``) is never pinching, so losing the hand
+    stops the arm just like letting go.
+    """
+
+    def __init__(self, on: float = 0.30, off: float = 0.45, lost_timeout: float = 0.25):
+        self.on, self.off, self.lost_timeout = on, off, lost_timeout
+        self.pinched = False
+
+    def update(self, obs: HandObservation | None, now: float) -> bool:
+        if obs is None or obs.pinch is None or now - obs.t > self.lost_timeout:
+            self.pinched = False
+        elif self.pinched:
+            self.pinched = obs.pinch < self.off
+        else:
+            self.pinched = obs.pinch < self.on
+        return self.pinched
+
+
 class OneEuroFilter:
     """The "1 euro filter" (Casiez et al., 2012): a low-pass whose cutoff rises with speed.
 
@@ -151,6 +185,7 @@ class HandObservation:
     side: str = "?"  # "Left" / "Right", as MediaPipe sees it (on the mirrored image = your hand)
     score: float = 1.0  # MediaPipe's confidence it's a hand
     image_xy: np.ndarray | None = None  # (21, 2) landmarks, for drawing the preview
+    pinch: float | None = None  # pinch_ratio(): ~0.15 fingers touching, 0.6+ open
 
 
 @dataclass

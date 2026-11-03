@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from cardputer_teleop.hand import HandFollower, HandObservation, HandSettings
+from cardputer_teleop.hand import HandFollower, HandObservation, HandSettings, PinchDetector
 from cardputer_teleop.protocol import LeaderPacket
 from cardputer_teleop.transforms import axis_angle_to_matrix, make_transform, so3_exp, so3_log, wxyz_to_matrix
 
@@ -63,6 +63,8 @@ class LeaderSettings:
     tilt_full_deg: float = 30.0  # tilt at which you reach full speed
     # Phase 4: webcam hand position while the clutch is held (None = off). Replaces push.
     hand: HandSettings | None = None
+    # Pinch thumb + index to grab, instead of (or as well as) holding space. Needs ``hand``.
+    pinch_clutch: bool = False
 
     def __post_init__(self):
         if self.translation not in TRANSLATION_MODES:
@@ -158,6 +160,8 @@ class CardputerLeader:
         self.settings = settings or LeaderSettings()
         self.push = PushIntegrator(self.settings)
         self.hand = HandFollower(self.settings.hand) if self.settings.hand is not None else None
+        self.pinch = PinchDetector()
+        self.pinched = False
         self.mode = "idle"
         self._R_dev0: np.ndarray | None = None  # device orientation at the grab (robot frame)
         self._T_tcp0: np.ndarray | None = None  # TCP pose at the grab
@@ -212,6 +216,7 @@ class CardputerLeader:
         compared with to tell whether the hand is still in view.
         """
         s = self.settings
+        self.pinched = s.pinch_clutch and self.pinch.update(hand, now if now is not None else 0.0)
         if not enabled or pkt is None:
             self.release()
             return LeaderCommand("idle")
@@ -223,7 +228,7 @@ class CardputerLeader:
         want = "idle"
         if pkt.tilt_move and s.translation == "tilt":
             want = "tilt"
-        elif pkt.clutch:
+        elif pkt.clutch or self.pinched:
             want = "orient"
         if want == "idle":
             self.release()

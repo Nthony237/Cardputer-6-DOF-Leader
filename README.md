@@ -74,6 +74,7 @@ pip install -e ".[hand]"                      # mediapipe + opencv
 cardputer-hand-view                           # check the tracking: preview, 3D ball, jitter
 cardputer-teleop --cardputer --hand webcam    # hold space: hand moves it, Cardputer turns it
 cardputer-teleop --fake hand --hand fake      # same, no hardware
+cardputer-teleop --cardputer --hand webcam --pinch   # pinch thumb+index to grab (Cardputer on the back of your hand)
 ```
 
 See [docs/phase4-hand-tracking.md](docs/phase4-hand-tracking.md) for how it works and how to

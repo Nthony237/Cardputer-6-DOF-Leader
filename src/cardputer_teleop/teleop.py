@@ -49,7 +49,7 @@ def parse_args(argv=None):
     p.add_argument("--cardputer", action="store_true",
                    help="Listen for the Cardputer: its packets are the heartbeat, its keys drive the gripper")
     p.add_argument("--udp-port", type=int, default=DEFAULT_PORT, help="UDP port for --cardputer")
-    p.add_argument("--fake", choices=("rock", "push", "tilt", "hand"),
+    p.add_argument("--fake", choices=("rock", "push", "tilt", "hand", "wrist"),
                    help="Also run a fake Cardputer doing this routine (implies --cardputer)")
     p.add_argument("--translation", choices=TRANSLATION_MODES, default="tilt",
                    help="How the Cardputer moves the gripper: tilt (hold x, tip it), push (pushes while "
@@ -62,6 +62,9 @@ def parse_args(argv=None):
     g = p.add_argument_group("Phase 4: hand position from the webcam")
     g.add_argument("--hand", choices=("webcam", "fake"),
                    help="Move the gripper with your hand while space is held (needs --cardputer or --fake)")
+    g.add_argument("--pinch", action="store_true",
+                   help="Pinch thumb and index together to grab (follow), open to stop. Space/G0 still "
+                        "works too. Lets you strap the Cardputer to your wrist")
     g.add_argument("--camera", type=int, default=0, help="Camera number (0 = built-in webcam)")
     g.add_argument("--hand-side", choices=("any", "left", "right"), default="any",
                    help="Which of your hands to follow")
@@ -102,6 +105,8 @@ def main(argv=None):
     stop_fake = threading.Event()
     if args.fake:
         args.cardputer = True
+    if args.pinch and not args.hand:
+        raise SystemExit("--pinch needs the camera: add --hand webcam (or --hand fake).")
     if args.hand and not args.cardputer:
         raise SystemExit("--hand needs the Cardputer: its clutch (space) says when to follow and its IMU "
                          "gives the orientation. Add --cardputer (or --fake hand to try it without one).")
@@ -113,7 +118,8 @@ def main(argv=None):
         hand_settings = HandSettings(axes=args.hand_axes, gain=args.hand_gain) if args.hand else None
         leader = CardputerLeader(LeaderSettings(heading_offset_deg=args.heading_offset,
                                                 rotation_scale=args.rotation_scale,
-                                                translation=args.translation, hand=hand_settings))
+                                                translation=args.translation, hand=hand_settings,
+                                                pinch_clutch=args.pinch))
         if args.fake:
             from cardputer_teleop import fake_sender
 
@@ -244,7 +250,8 @@ def main(argv=None):
                 st = receiver.stats
                 status += f"  \nCardputer: {st.rate_hz:.0f} Hz, {st.loss_pct:.1f}% lost"
                 if lead is not None:
-                    mode = {"idle": "not steering", "orient": "turning (space)", "tilt": "tilt-moving (x)"}
+                    grab = "pinch" if leader.pinched else "space"
+                    mode = {"idle": "not steering", "orient": f"following ({grab})", "tilt": "tilt-moving (x)"}
                     status += f"  \nLeader: {mode[lead.mode]}" + (f", {lead.info}" if lead.info else "")
             if tracker is not None:
                 ts = tracker.stats

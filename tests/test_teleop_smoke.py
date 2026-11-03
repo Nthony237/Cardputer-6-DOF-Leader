@@ -75,3 +75,11 @@ def test_hand_view_runs_with_fake_camera():
     from cardputer_teleop.hand_view import main
 
     main(["--fake", "--duration", "1.0", "--port", str(free_port())])
+
+
+def test_sim_wrist_mount_with_pinch():
+    """Cardputer on the wrist (no keys), the fake camera's pinch does the grabbing."""
+    from cardputer_teleop.teleop import main
+
+    main(["--mode", "sim", "--keys", "none", "--duration", "2.5", "--port", str(free_port()),
+          "--fake", "wrist", "--udp-port", "0", "--hand", "fake", "--pinch"])

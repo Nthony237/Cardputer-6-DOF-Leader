@@ -22,7 +22,13 @@ from pathlib import Path
 
 import numpy as np
 
-from cardputer_teleop.hand import HAND_CONNECTIONS, HandObservation, focal_length_px, hand_position
+from cardputer_teleop.hand import (
+    HAND_CONNECTIONS,
+    HandObservation,
+    focal_length_px,
+    hand_position,
+    pinch_ratio,
+)
 
 MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/"
              "float16/latest/hand_landmarker.task")
@@ -171,7 +177,7 @@ class WebcamHandTracker:
                 if p is not None:
                     cats = result.handedness[i][0]
                     self.latest = HandObservation(t=t, p_cam=p, side=cats.category_name, score=cats.score,
-                                                  image_xy=xy)
+                                                  image_xy=xy, pinch=pinch_ratio(P))
             seen.append(xy is not None)
             times.append(t)
             if len(times) > 1:
@@ -193,7 +199,7 @@ class FakeHandTracker:
     """A pretend camera: the hand traces a slow 3D loop about 50 cm in front of the screen.
 
     Every 6 s it "loses" the hand for 0.4 s, and once it reappears 20 cm away (a glitch), so
-    the freeze / re-zero logic gets exercised. No thread needed: ``latest`` is computed on read.
+    the freeze / re-zero logic gets exercised. It pinches from 0.5 s to 5 s of every 6. No thread needed: ``latest`` is computed on read.
     """
 
     side = "any"
@@ -220,7 +226,8 @@ class FakeHandTracker:
         if 8.0 <= (k % 24.0) < 8.4:
             p = p + np.array([0.2, 0.0, 0.0])
         p = p + self._rng.normal(0.0, self.noise_m, 3)
-        return HandObservation(t=self._t0 + k, p_cam=p, side="Right", score=0.95)
+        pinch = 0.15 if 0.5 <= (k % 6.0) < 5.0 else 0.7
+        return HandObservation(t=self._t0 + k, p_cam=p, side="Right", score=0.95, pinch=pinch)
 
     @property
     def latest(self) -> HandObservation | None:
