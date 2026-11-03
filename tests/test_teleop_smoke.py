@@ -53,3 +53,25 @@ def test_example_config_loads_and_matches_chain():
     chain = SerialChain(cfg.robot.urdf, cfg.robot.ee_link)
     assert len(cfg.robot.home) == chain.dof
     assert cfg.workspace.contains(chain.fk(cfg.robot.home)[:3, 3])
+
+
+def test_sim_with_fake_cardputer_and_fake_camera():
+    """Phase 4 end to end: fake Cardputer (clutch + orientation) and fake camera (position)."""
+    from cardputer_teleop.teleop import main
+
+    main(["--mode", "sim", "--keys", "none", "--duration", "2.5", "--port", str(free_port()),
+          "--fake", "hand", "--udp-port", "0", "--hand", "fake"])
+
+
+def test_hand_needs_the_cardputer():
+    from cardputer_teleop.teleop import main
+
+    with pytest.raises(SystemExit, match="needs the Cardputer"):
+        main(["--mode", "sim", "--keys", "none", "--duration", "0.1", "--port", str(free_port()),
+              "--hand", "fake"])
+
+
+def test_hand_view_runs_with_fake_camera():
+    from cardputer_teleop.hand_view import main
+
+    main(["--fake", "--duration", "1.0", "--port", str(free_port())])
