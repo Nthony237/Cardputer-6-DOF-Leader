@@ -19,6 +19,16 @@ def test_sim_runs_and_exits():
     main(["--mode", "sim", "--keys", "none", "--duration", "0.5", "--port", str(free_port())])
 
 
+@pytest.mark.parametrize("routine", ["push", "tilt"])
+def test_sim_with_fake_cardputer(routine):
+    """Phase 3 end to end: a fake Cardputer over real UDP steers the sim arm."""
+    from cardputer_teleop.teleop import main
+
+    translation = "push" if routine == "push" else "tilt"
+    main(["--mode", "sim", "--keys", "none", "--duration", "2.5", "--port", str(free_port()),
+          "--fake", routine, "--udp-port", "0", "--translation", translation])
+
+
 def test_config_file(tmp_path):
     from cardputer_teleop.config import PLACEHOLDER_URDF, load_config
 
