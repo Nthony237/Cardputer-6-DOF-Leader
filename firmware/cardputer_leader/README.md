@@ -7,7 +7,8 @@ key presses to the laptop over Wi-Fi (UDP, 100 packets per second).
 
 | Key | What it does |
 |---|---|
-| `space` or the side button (G0) | **Clutch**, hold it. Phase 3 will only move the arm while it's held. |
+| `space` or the side button (G0) | **Clutch**, hold it and turn the Cardputer: the gripper turns the same way. Let go and the arm stops. |
+| `x` | Hold and tip the Cardputer like a joystick: the gripper moves (forward/back, left/right, twist for up/down) |
 | `c` / `v` | Hold to close / open the gripper |
 | `z` | Zero yaw: "the way I'm pointing now is straight ahead" |
 | `b` | Re-measure the gyro bias (put the Cardputer down on a table first) |

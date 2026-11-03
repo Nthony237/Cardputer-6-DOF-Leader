@@ -22,8 +22,9 @@
 
 // Keys. CLUTCH is held, the others are one press each.
 // The side button (G0) also works as the clutch.
-#define KEY_CLUTCH ' '        // space: hold to move the arm (Phase 3+)
+#define KEY_CLUTCH ' '        // space: hold to turn the gripper with the Cardputer
 #define KEY_GRIP_CLOSE 'c'    // hold to close the gripper
 #define KEY_GRIP_OPEN 'v'     // hold to open the gripper
 #define KEY_ZERO_YAW 'z'      // press: current heading becomes "straight ahead"
 #define KEY_RECALIBRATE 'b'   // press with the device still: re-measure gyro bias
+#define KEY_TILT_MOVE 'x'     // hold: tilt the Cardputer like a joystick to move the gripper (Phase 3)

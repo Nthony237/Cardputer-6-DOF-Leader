@@ -1,4 +1,4 @@
-// Cardputer ADV leader firmware (Phase 2): IMU orientation + keys -> UDP -> laptop.
+// Cardputer ADV leader firmware (Phase 2/3): IMU orientation + keys -> UDP -> laptop.
 //
 // What happens, in order:
 //   1. Boot: join Wi-Fi, then measure the gyro's bias while you hold the device still.
@@ -146,9 +146,11 @@ static void draw_screen(uint8_t flags, float send_rate) {
   canvas.setTextColor((flags & FLAG_GRIP_CLOSE) ? GREEN : DARKGREY);
   canvas.print("CLOSE ");
   canvas.setTextColor((flags & FLAG_GRIP_OPEN) ? GREEN : DARKGREY);
-  canvas.println("OPEN");
+  canvas.print("OPEN ");
+  canvas.setTextColor((flags & FLAG_TILT_MOVE) ? GREEN : DARKGREY);
+  canvas.println("TILT");
   canvas.setTextColor(DARKGREY);
-  canvas.println("space/G0 clutch  c/v grip  b recal");
+  canvas.println("spc/G0 turn  x tilt-move  c/v grip");
   canvas.pushSprite(0, 0);
 }
 
@@ -224,6 +226,7 @@ void loop() {
   if (key_down(KEY_CLUTCH) || M5Cardputer.BtnA.isPressed()) flags |= FLAG_CLUTCH;
   if (key_down(KEY_GRIP_CLOSE)) flags |= FLAG_GRIP_CLOSE;
   if (key_down(KEY_GRIP_OPEN)) flags |= FLAG_GRIP_OPEN;
+  if (key_down(KEY_TILT_MOVE)) flags |= FLAG_TILT_MOVE;
   bool settling = !calibrating && (millis() - filter_start_ms) < (uint32_t)(STARTUP_SECONDS * 1000);
   if (calibrating || settling) flags |= FLAG_CALIBRATING;
 

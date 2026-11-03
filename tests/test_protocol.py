@@ -48,7 +48,7 @@ def test_matches_firmware_header():
     defines = dict(re.findall(r"#define (\w+) (.+)", text))
     assert defines["PACKET_MAGIC"].strip('"').encode() == protocol.MAGIC
     assert int(defines["PACKET_VERSION"]) == protocol.VERSION
-    for name in ("FLAG_CLUTCH", "FLAG_GRIP_CLOSE", "FLAG_GRIP_OPEN", "FLAG_CALIBRATING"):
+    for name in ("FLAG_CLUTCH", "FLAG_GRIP_CLOSE", "FLAG_GRIP_OPEN", "FLAG_CALIBRATING", "FLAG_TILT_MOVE"):
         bit = int(re.search(r"1 << (\d+)", defines[name]).group(1))
         assert getattr(protocol, name) == 1 << bit, name
     assert f"sizeof(LeaderPacket) == {PACKET_SIZE}" in text

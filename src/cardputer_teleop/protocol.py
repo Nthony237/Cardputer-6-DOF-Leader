@@ -23,6 +23,7 @@ FLAG_CLUTCH = 1 << 0
 FLAG_GRIP_CLOSE = 1 << 1
 FLAG_GRIP_OPEN = 1 << 2
 FLAG_CALIBRATING = 1 << 3
+FLAG_TILT_MOVE = 1 << 4  # Phase 3: tilt-as-joystick key held (older firmware never sets it)
 
 _FORMAT = struct.Struct("<4sBBBBII4f3f3f")
 PACKET_SIZE = _FORMAT.size
@@ -59,6 +60,10 @@ class LeaderPacket:
     @property
     def calibrating(self) -> bool:
         return bool(self.flags & FLAG_CALIBRATING)
+
+    @property
+    def tilt_move(self) -> bool:
+        return bool(self.flags & FLAG_TILT_MOVE)
 
     @property
     def gripper_direction(self) -> float:

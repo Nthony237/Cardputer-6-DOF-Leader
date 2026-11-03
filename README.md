@@ -15,8 +15,8 @@ Cardputer (IMU + clutch) --UDP--> receiver --> fuse with AprilTag position
 | Phase | What | State |
 |---|---|---|
 | 1 | Differential IK in sim + Cartesian keyboard teleop | done |
-| 2 | Cardputer IMU streaming, orientation shown in viser | **done** ([how it works](docs/phase2-imu-streaming.md), [firmware](firmware/cardputer_leader/README.md)) |
-| 3 | Orientation control + IMU-only clutch-and-push translation | next |
+| 2 | Cardputer IMU streaming, orientation shown in viser | done ([how it works](docs/phase2-imu-streaming.md), [firmware](firmware/cardputer_leader/README.md)) |
+| 3 | Orientation control + IMU-only clutch-and-push translation | **in progress** ([how it works](docs/phase3-orientation-control.md)) |
 | 4 | MediaPipe hand-tracking position fused with the IMU (AprilTag as fallback) | |
 | 5 | Real arm, supervised, all safety limits on | |
 | 6 | Evaluation (joint jog vs Cartesian keyboard vs controller) and demo collection | |
@@ -62,7 +62,8 @@ Flash the firmware ([instructions](firmware/cardputer_leader/README.md)), then:
 ```bash
 cardputer-imu-view            # a block in the browser turns with the device
 cardputer-imu-view --fake     # same, with a fake Cardputer (no hardware)
-cardputer-teleop --cardputer  # arm sim: holds unless Cardputer packets keep arriving
+cardputer-teleop --cardputer  # arm sim steered by the Cardputer (space = turn, x = tilt-move)
+cardputer-teleop --fake tilt  # same, with a fake Cardputer (also: --fake push --translation push)
 cardputer-fake --help         # fake device with packet loss / stalls, for testing
 ```
 
@@ -87,6 +88,7 @@ The IK reads the chain from the URDF root to `ee_link` and ignores side branches
 | `protocol.py` | The 56-byte Cardputer UDP packet (matches `firmware/.../packet.h`) |
 | `orientation.py` | Quaternion helpers and the Madgwick filter (same math as the firmware) |
 | `receiver.py` | UDP receiver: newest packet, loss counting, heartbeat |
+| `leader.py` | Phase 3: Cardputer packet → arm target (clutch-relative orientation, push / tilt translation) |
 | `imu_view.py` | `cardputer-imu-view`: live device orientation in viser |
 | `fake_sender.py` | `cardputer-fake`: simulated Cardputer for testing without hardware |
 | `firmware/cardputer_leader/` | PlatformIO firmware for the Cardputer ADV |
