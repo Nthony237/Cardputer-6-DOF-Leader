@@ -6,7 +6,7 @@ M5Stack Cardputer ADV (ESP32-S3, BMI270 IMU) streaming over UDP to a laptop that
 orientation with camera hand-tracking position and drives the arm through differential IK.
 
 ```
-Cardputer (IMU + clutch) --UDP--> receiver --> fuse with AprilTag position
+Cardputer (IMU + clutch) --UDP--> receiver --> fuse with webcam hand position (MediaPipe)
     --> damped-least-squares IK (joint / speed / workspace limits) --> viser sim | real YAM
 ```
 
@@ -16,8 +16,8 @@ Cardputer (IMU + clutch) --UDP--> receiver --> fuse with AprilTag position
 |---|---|---|
 | 1 | Differential IK in sim + Cartesian keyboard teleop | done |
 | 2 | Cardputer IMU streaming, orientation shown in viser | done ([how it works](docs/phase2-imu-streaming.md), [firmware](firmware/cardputer_leader/README.md)) |
-| 3 | Orientation control + IMU-only clutch-and-push translation | **in progress** ([how it works](docs/phase3-orientation-control.md)) |
-| 4 | MediaPipe hand-tracking position fused with the IMU (AprilTag as fallback) | |
+| 3 | Orientation control + IMU-only clutch-and-push translation | done, tested on device ([how it works](docs/phase3-orientation-control.md)) |
+| 4 | MediaPipe hand-tracking position fused with the IMU (AprilTag as fallback) | **in progress**, sim ([how it works](docs/phase4-hand-tracking.md)) |
 | 5 | Real arm, supervised, all safety limits on | |
 | 6 | Evaluation (joint jog vs Cartesian keyboard vs controller) and demo collection | |
 
@@ -67,6 +67,19 @@ cardputer-teleop --fake tilt  # same, with a fake Cardputer (also: --fake push -
 cardputer-fake --help         # fake device with packet loss / stalls, for testing
 ```
 
+### Webcam hand tracking (Phase 4)
+
+```bash
+pip install -e ".[hand]"                      # mediapipe + opencv
+cardputer-hand-view                           # check the tracking: preview, 3D ball, jitter
+cardputer-teleop --cardputer --hand webcam    # hold space: hand moves it, Cardputer turns it
+cardputer-teleop --fake hand --hand fake      # same, no hardware
+cardputer-teleop --cardputer --hand webcam --pinch   # pinch thumb+index to grab (Cardputer on the back of your hand)
+```
+
+See [docs/phase4-hand-tracking.md](docs/phase4-hand-tracking.md) for how it works and how to
+judge whether MediaPipe is good enough or AprilTag is needed.
+
 ### Using the real YAM URDF
 
 Copy `configs/example.toml`, set `urdf`, `ee_link` (the link at the point between the fingers),
@@ -89,6 +102,9 @@ The IK reads the chain from the URDF root to `ee_link` and ignores side branches
 | `orientation.py` | Quaternion helpers and the Madgwick filter (same math as the firmware) |
 | `receiver.py` | UDP receiver: newest packet, loss counting, heartbeat |
 | `leader.py` | Phase 3: Cardputer packet → arm target (clutch-relative orientation, push / tilt translation) |
+| `hand.py` | Phase 4 math: MediaPipe landmarks → 3D hand position, 1 euro filter, clutch-relative follower |
+| `hand_tracker.py` | Webcam + MediaPipe background thread, and a fake camera for tests |
+| `hand_view.py` | `cardputer-hand-view`: webcam preview, hand position in 3D, jitter numbers |
 | `imu_view.py` | `cardputer-imu-view`: live device orientation in viser |
 | `fake_sender.py` | `cardputer-fake`: simulated Cardputer for testing without hardware |
 | `firmware/cardputer_leader/` | PlatformIO firmware for the Cardputer ADV |

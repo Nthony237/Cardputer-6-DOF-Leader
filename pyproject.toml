@@ -13,6 +13,7 @@ dependencies = ["numpy>=1.24"]
 [project.optional-dependencies]
 sim = ["viser>=1.0", "yourdfpy>=0.0.56"]
 keys = ["pynput>=1.7"]
+hand = ["mediapipe>=0.10.14"]  # brings opencv-contrib-python; don't add opencv-python too
 test = ["pytest>=7.4"]
 dev = ["cardputer-teleop[sim,test]"]
 
@@ -20,6 +21,7 @@ dev = ["cardputer-teleop[sim,test]"]
 cardputer-teleop = "cardputer_teleop.teleop:main"
 cardputer-imu-view = "cardputer_teleop.imu_view:main"
 cardputer-fake = "cardputer_teleop.fake_sender:main"
+cardputer-hand-view = "cardputer_teleop.hand_view:main"
 
 [tool.setuptools]
 include-package-data = true

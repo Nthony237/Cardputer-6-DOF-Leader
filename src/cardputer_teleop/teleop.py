@@ -8,7 +8,11 @@ while packets arrive) and the Cardputer steers the gripper (Phase 3, see ``leade
 * or, with ``--translation push``, quick pushes while holding space nudge the gripper;
 * c / v close / open the gripper, z sets "forward", b recalibrates the gyro.
 
-``--fake push`` (or ``tilt`` / ``rock``) runs a pretend Cardputer in the background.
+``--fake push`` (or ``tilt`` / ``rock`` / ``hand``) runs a pretend Cardputer in the background.
+
+Phase 4: ``--hand webcam`` adds the laptop camera. While you hold space, the gripper moves the way
+your hand moves (MediaPipe hand tracking) and turns the way the Cardputer turns (its IMU).
+``--hand fake`` pretends to be a camera, so ``--fake hand --hand fake`` needs no hardware at all.
 """
 from __future__ import annotations
 
@@ -20,6 +24,7 @@ import numpy as np
 
 from cardputer_teleop.config import load_config
 from cardputer_teleop.controller import CartesianController
+from cardputer_teleop.hand import DEFAULT_AXES, HandSettings
 from cardputer_teleop.ik import DifferentialIK
 from cardputer_teleop.keyboard import HELP, HeldKeys, KeyboardInput, gripper_from_keys, twist_from_keys
 from cardputer_teleop.kinematics import SerialChain
@@ -44,7 +49,7 @@ def parse_args(argv=None):
     p.add_argument("--cardputer", action="store_true",
                    help="Listen for the Cardputer: its packets are the heartbeat, its keys drive the gripper")
     p.add_argument("--udp-port", type=int, default=DEFAULT_PORT, help="UDP port for --cardputer")
-    p.add_argument("--fake", choices=("rock", "push", "tilt"),
+    p.add_argument("--fake", choices=("rock", "push", "tilt", "hand", "wrist"),
                    help="Also run a fake Cardputer doing this routine (implies --cardputer)")
     p.add_argument("--translation", choices=TRANSLATION_MODES, default="tilt",
                    help="How the Cardputer moves the gripper: tilt (hold x, tip it), push (pushes while "
@@ -54,6 +59,21 @@ def parse_args(argv=None):
                         "180 if you press z while facing the robot")
     p.add_argument("--rotation-scale", type=float, default=1.0,
                    help="Gripper rotation per hand rotation (0.5 = half as much, finer control)")
+    g = p.add_argument_group("Phase 4: hand position from the webcam")
+    g.add_argument("--hand", choices=("webcam", "fake"),
+                   help="Move the gripper with your hand while space is held (needs --cardputer or --fake)")
+    g.add_argument("--pinch", action="store_true",
+                   help="Pinch thumb and index together to grab (follow), open to stop. Space/G0 still "
+                        "works too. Lets you strap the Cardputer to your wrist")
+    g.add_argument("--camera", type=int, default=0, help="Camera number (0 = built-in webcam)")
+    g.add_argument("--hand-side", choices=("any", "left", "right"), default="any",
+                   help="Which of your hands to follow")
+    g.add_argument("--hand-gain", type=float, default=1.0, help="Gripper metres per hand metre")
+    g.add_argument("--hand-axes", default=DEFAULT_AXES,
+                   help="Camera axis for robot x,y,z. The default means: toward the screen = forward, "
+                        "left = left, up = up (you sit facing the laptop)")
+    g.add_argument("--camera-hfov", type=float, default=65.0,
+                   help="Camera horizontal field of view in degrees (scales toward/away distances)")
     p.add_argument("--duration", type=float, default=0.0, help="Stop after N seconds (0 = run until quit)")
     return p.parse_args(argv)
 
@@ -85,14 +105,21 @@ def main(argv=None):
     stop_fake = threading.Event()
     if args.fake:
         args.cardputer = True
+    if args.pinch and not args.hand:
+        raise SystemExit("--pinch needs the camera: add --hand webcam (or --hand fake).")
+    if args.hand and not args.cardputer:
+        raise SystemExit("--hand needs the Cardputer: its clutch (space) says when to follow and its IMU "
+                         "gives the orientation. Add --cardputer (or --fake hand to try it without one).")
     if args.cardputer:
         from cardputer_teleop.receiver import CardputerReceiver
         from cardputer_teleop.viz import CardputerModel
 
         receiver = CardputerReceiver(port=args.udp_port, heartbeat=controller.heartbeat).start()
+        hand_settings = HandSettings(axes=args.hand_axes, gain=args.hand_gain) if args.hand else None
         leader = CardputerLeader(LeaderSettings(heading_offset_deg=args.heading_offset,
                                                 rotation_scale=args.rotation_scale,
-                                                translation=args.translation))
+                                                translation=args.translation, hand=hand_settings,
+                                                pinch_clutch=args.pinch))
         if args.fake:
             from cardputer_teleop import fake_sender
 
@@ -102,6 +129,21 @@ def main(argv=None):
             print(f"Fake Cardputer running the '{args.fake}' routine.")
         device_model = CardputerModel(viewer.server, "/cardputer", position=(0.0, -0.45, 0.35), scale=2.0)
         print(f"Listening for the Cardputer on UDP {receiver.port}; the arm holds until packets arrive.")
+    tracker = None
+    preview = None
+    if args.hand:
+        from cardputer_teleop.hand_tracker import FakeHandTracker, WebcamHandTracker
+
+        if args.hand == "fake":
+            tracker = FakeHandTracker()
+            print("Fake camera: a pretend hand draws slow loops.")
+        else:
+            tracker = WebcamHandTracker(camera=args.camera, side=args.hand_side, hfov_deg=args.camera_hfov)
+            print("Webcam hand tracking on: hold space and move your hand.")
+        tracker.start()
+        preview = viewer.server.gui.add_image(np.zeros((180, 320, 3), dtype=np.uint8), label="Webcam",
+                                              format="jpeg", jpeg_quality=70)
+    last_preview = None
     keyboard = KeyboardInput(args.keys) if args.keys != "none" else None
     print(HELP)
 
@@ -152,7 +194,8 @@ def main(argv=None):
             if leader is not None:
                 was_steering = leader.mode != "idle"
                 lead = leader.update(device, chain.fk(q), dt, lin,
-                                     enabled=controller.heartbeat.alive() and not controller.held)
+                                     enabled=controller.heartbeat.alive() and not controller.held,
+                                     hand=tracker.latest if tracker else None, now=now)
                 if was_steering and lead.mode == "idle":
                     controller.reset_target(q)  # let go of the clutch = stop right here
                 if lead.mode != "idle":
@@ -207,8 +250,18 @@ def main(argv=None):
                 st = receiver.stats
                 status += f"  \nCardputer: {st.rate_hz:.0f} Hz, {st.loss_pct:.1f}% lost"
                 if lead is not None:
-                    mode = {"idle": "not steering", "orient": "turning (space)", "tilt": "tilt-moving (x)"}
+                    grab = "pinch" if leader.pinched else "space"
+                    mode = {"idle": "not steering", "orient": f"following ({grab})", "tilt": "tilt-moving (x)"}
                     status += f"  \nLeader: {mode[lead.mode]}" + (f", {lead.info}" if lead.info else "")
+            if tracker is not None:
+                ts = tracker.stats
+                status += f"  \nCamera: {ts.fps:.0f} fps, hand seen in {ts.seen_pct:.0f}% of frames"
+                status += f", {ts.proc_ms:.0f} ms" if ts.proc_ms else ""
+                if ts.error:
+                    status += f"  \n**Camera: {ts.error}**"
+                if tracker.preview is not None and tracker.preview is not last_preview:
+                    last_preview = tracker.preview
+                    preview.image = last_preview
             status += f"  \nTCP [{p[0]:.3f}, {p[1]:.3f}, {p[2]:.3f}] m, mode {args.mode}"
             viewer.update(q, robot.get_gripper(), T_tcp, controller.T_target, status)
 
@@ -223,6 +276,8 @@ def main(argv=None):
     finally:
         robot.hold()
         stop_fake.set()
+        if tracker:
+            tracker.close()
         if receiver:
             receiver.close()
         if keyboard:

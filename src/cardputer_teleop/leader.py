@@ -21,6 +21,10 @@ Plain-language version (more in docs/phase3-orientation-control.md):
     and the speed is forced back to zero as soon as your hand stops, so errors can't pile up.
   - ``tilt``: hold ``x`` and the Cardputer becomes a joystick. Tip it forward/back/left/right
     to drive the gripper that way, twist it to go up/down. The gripper's angle stays frozen.
+* **Phase 4: position from the webcam.** With ``LeaderSettings.hand`` set, holding the clutch
+  also moves the gripper by however far your hand moved since the grab, as seen by the camera
+  (``hand.py``). The IMU still gives the orientation, so the two sensors each do what they're
+  good at. ``x`` (tilt) still works as the camera-free fallback.
 
 Everything this module produces goes through ``CartesianController`` (workspace box, lead
 leash, IK speed and joint limits, heartbeat), so it adds no new way to bypass the safety chain.
@@ -32,6 +36,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from cardputer_teleop.hand import HandFollower, HandObservation, HandSettings, PinchDetector
 from cardputer_teleop.protocol import LeaderPacket
 from cardputer_teleop.transforms import axis_angle_to_matrix, make_transform, so3_exp, so3_log, wxyz_to_matrix
 
@@ -56,6 +61,10 @@ class LeaderSettings:
     # tilt-as-joystick
     tilt_deadband_deg: float = 6.0  # small tilts do nothing, so a shaky hand holds still
     tilt_full_deg: float = 30.0  # tilt at which you reach full speed
+    # Phase 4: webcam hand position while the clutch is held (None = off). Replaces push.
+    hand: HandSettings | None = None
+    # Pinch thumb + index to grab, instead of (or as well as) holding space. Needs ``hand``.
+    pinch_clutch: bool = False
 
     def __post_init__(self):
         if self.translation not in TRANSLATION_MODES:
@@ -150,6 +159,9 @@ class CardputerLeader:
     def __init__(self, settings: LeaderSettings | None = None):
         self.settings = settings or LeaderSettings()
         self.push = PushIntegrator(self.settings)
+        self.hand = HandFollower(self.settings.hand) if self.settings.hand is not None else None
+        self.pinch = PinchDetector()
+        self.pinched = False
         self.mode = "idle"
         self._R_dev0: np.ndarray | None = None  # device orientation at the grab (robot frame)
         self._T_tcp0: np.ndarray | None = None  # TCP pose at the grab
@@ -178,6 +190,8 @@ class CardputerLeader:
         self.mode = "idle"
         self._R_dev0 = self._T_tcp0 = self._R_smooth = None
         self.push.reset()
+        if self.hand is not None:
+            self.hand.reset()
 
     def _grab(self, pkt: LeaderPacket, T_tcp: np.ndarray, mode: str) -> None:
         self.mode = mode
@@ -186,17 +200,23 @@ class CardputerLeader:
         self._R_smooth = self._T_tcp0[:3, :3].copy()
         self._yaw_count = pkt.yaw_reset_count
         self.push.reset()
+        if self.hand is not None:
+            self.hand.reset()
         self.grabs += 1
 
     def update(self, pkt: LeaderPacket | None, T_tcp: np.ndarray, dt: float, linear_speed: float,
-               enabled: bool = True) -> LeaderCommand:
+               enabled: bool = True, hand: HandObservation | None = None,
+               now: float | None = None) -> LeaderCommand:
         """One control tick.
 
         ``T_tcp`` is the arm's *actual* TCP pose (forward kinematics), used as the snapshot on a
         grab so the arm never jumps. ``enabled`` is False whenever the loop must not follow the
         device (link lost, hold pressed, homing): we let go, and grab afresh once it's True again.
+        ``hand`` is the newest webcam observation (Phase 4) and ``now`` the time.monotonic() it is
+        compared with to tell whether the hand is still in view.
         """
         s = self.settings
+        self.pinched = s.pinch_clutch and self.pinch.update(hand, now if now is not None else 0.0)
         if not enabled or pkt is None:
             self.release()
             return LeaderCommand("idle")
@@ -208,7 +228,7 @@ class CardputerLeader:
         want = "idle"
         if pkt.tilt_move and s.translation == "tilt":
             want = "tilt"
-        elif pkt.clutch:
+        elif pkt.clutch or self.pinched:
             want = "orient"
         if want == "idle":
             self.release()
@@ -229,7 +249,12 @@ class CardputerLeader:
             self._R_smooth = R_des
         p = self._T_tcp0[:3, 3].copy()
         info = f"turned {math.degrees(np.linalg.norm(so3_log(dR))):.0f} deg since grab"
-        if s.translation == "push":
+        if self.hand is not None:
+            off = self.hand.update(hand, now if now is not None else (hand.t if hand else 0.0))
+            p = p + off
+            state = "moved" if self.hand.tracking else "hand not in view, position held at"
+            info += f", {state} {np.linalg.norm(off) * 100:.1f} cm"
+        elif s.translation == "push":
             off = self.push.update(self.accel_world(pkt), dt)
             p = p + off
             info += f", pushed {np.linalg.norm(off) * 100:.1f} cm"

@@ -8,6 +8,10 @@ Lets you (and the tests) run the receiver, viewer and teleop with no hardware. S
   and up, then back, then lets go of the clutch. Tests push-to-nudge translation.
 * ``tilt``: holds the tilt key (x) and tips forward, then right, then twists. Tests
   tilt-as-joystick translation.
+* ``hand``: holds the clutch for 7 s out of every 8 and turns gently. Pair it with
+  ``cardputer-teleop --hand fake`` (or a real webcam) to test Phase 4 hand-position control.
+* ``wrist``: the same turning but no keys at all, as if strapped to a wrist. Pair it with
+  ``--hand fake --pinch``: the (fake) pinch does the grabbing.
 
 Options simulate a bad network: --drop loses a fraction of packets and --stall-after/--stall-for
 go silent for a while to show the heartbeat watchdog holding. --accel-noise adds sensor noise.
@@ -40,7 +44,7 @@ from cardputer_teleop.protocol import (
 from cardputer_teleop.transforms import so3_log, wxyz_to_matrix
 
 GRAVITY = 9.80665
-SCENARIOS = ("rock", "push", "tilt")
+SCENARIOS = ("rock", "push", "tilt", "hand", "wrist")
 CYCLE = 8.0  # s, length of one push / tilt routine
 
 # push routine: (start time in the cycle, duration, displacement in m). Each is a smooth
@@ -109,6 +113,12 @@ class FakeCardputer:
                 rpy += _bump(c, start, dur) * np.radians(angles)
             flags = FLAG_TILT_MOVE if 0.5 < c < 7.0 else 0
             return quat_from_rpy(*rpy), np.zeros(3), flags
+        if self.scenario == "wrist":  # strapped to a wrist: turns, but no keys (pinch does the grabbing)
+            q = quat_from_rpy(math.radians(10) * math.sin(0.7 * c), 0.0, math.radians(20) * math.sin(0.4 * c))
+            return q, np.zeros(3), 0
+        if self.scenario == "hand":
+            q = quat_from_rpy(math.radians(10) * math.sin(0.7 * c), 0.0, math.radians(20) * math.sin(0.4 * c))
+            return q, np.zeros(3), FLAG_CLUTCH if 0.5 < c < 7.5 else 0
         phase = t % 4.0
         flags = FLAG_CLUTCH if phase < 2.0 else 0
         flags |= FLAG_GRIP_CLOSE if 0.5 < phase < 1.5 else 0
